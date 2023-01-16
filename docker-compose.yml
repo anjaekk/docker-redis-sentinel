@@ -1,0 +1,77 @@
+version: '3.8'
+
+services: 
+  redis:
+    container_name: redis
+    image: library/redis:6.2.8-alpine
+    #image: bitnami/redis:6.2.8
+    ports:
+      - 6379:6379
+    restart: unless-stopped
+    environment:
+      - REDIS_REPLICATION_MODE=master
+      - ALLOW_EMPTY_PASSWORD=yes
+    networks:
+      - redis networks
+    volumes:
+      - redis-data:/data
+
+  redis-replica:
+    container_name: redis-replica
+    image: library/redis:6.2.8-alpine
+    #image: bitnami/redis:6.2.8
+    ports:
+      - 6479:6379
+    restart: unless-stopped
+    environment:
+      - REDIS_REPLICATION_MODE=slave
+      - REDIS_MASTER_HOST=redis
+      - ALLOW_EMPTY_PASSWORD=yes
+    command: redis-server --slaveof redis 6379 # Delete this command when using bitnami's image
+    networks:
+      - redis networks
+    volumes:
+      - redis-data:/data
+    depends_on:
+      - redis
+
+  redis-sentinel-1:
+    &redis-sentinel
+    container_name: redis-sentinel-1
+    image: bitnami/redis-sentinel:6.2.8
+    ports:
+      - 26379:26379
+    restart: unless-stopped
+    environment:
+      - REDIS_SENTINEL_DOWN_AFTER_MILLISECONDS=3000
+      - REDIS_MASTER_HOST=redis
+      - REDIS_MASTER_SET=redis
+      - REDIS_SENTINEL_QUORUM=2
+      - REDIS_SENTINEL_RESOLVE_HOSTNAMES=yes
+    networks:
+      - redis networks
+    volumes:
+      - redis-data:/data
+    depends_on:
+      - redis
+      - redis-replica
+
+  redis-sentinel-2:
+    <<: *redis-sentinel
+    container_name: redis-sentinel-2
+    ports:
+      - 26380:26379
+
+  redis-sentinel-3:
+    <<: *redis-sentinel
+    container_name: redis-sentinel-3
+    ports:
+      - 26381:26379
+
+volumes:
+  redis-data:
+    driver: local
+
+networks:
+  redis networks:
+    driver: bridge
